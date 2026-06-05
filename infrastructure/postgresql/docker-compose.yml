@@ -1,0 +1,21 @@
+services:
+  postgres:
+    image: postgres:17
+
+    container_name: reservex-postgres
+
+    environment:
+      POSTGRES_DB: reservex
+      POSTGRES_USER: root
+      POSTGRES_PASSWORD: root
+
+    ports:
+      - "5432:5432"
+
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
