@@ -74,6 +74,11 @@ public class SecurityConfig {
                 // ── Event Service — all GET endpoints are PUBLIC ─────────────
                 .requestMatchers(HttpMethod.GET, "/api/v1/events/**").permitAll()
 
+                 // TEMPORARY FOR DEVELOPMENT
+                .requestMatchers(HttpMethod.POST, "/api/v1/events/**").permitAll()
+                .requestMatchers(HttpMethod.PUT, "/api/v1/events/**").permitAll()
+                .requestMatchers(HttpMethod.DELETE, "/api/v1/events/**").permitAll()
+
                 // ── Inventory — availability summary is PUBLIC ───────────────
                 .requestMatchers(
                     HttpMethod.GET,
@@ -123,6 +128,8 @@ public class SecurityConfig {
         config.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
         config.setAllowedHeaders(List.of("*"));
         config.setAllowCredentials(true);
+
+        
 
         var source = new UrlBasedCorsConfigurationSource();
         source.registerCorsConfiguration("/**", config);
