@@ -1,7 +1,7 @@
 package com.reservex.event.dto.request;
 
-import com.reservex.event.entity.EventCategory;
-import com.reservex.event.entity.EventStatus;
+import com.reservex.event.enums.EventStatus;
+import com.reservex.event.enums.EventCategory;
 import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.*;
 import lombok.Getter;

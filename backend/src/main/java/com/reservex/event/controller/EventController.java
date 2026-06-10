@@ -19,6 +19,7 @@ import java.util.UUID;
  * POST   /api/v1/events
  * GET    /api/v1/events
  * GET    /api/v1/events/{eventId}
+ * GET    /api/v1/events/shows/{showId}
  * PUT    /api/v1/events/{eventId}
  * DELETE /api/v1/events/{eventId}
  */
@@ -127,5 +128,23 @@ public class EventController {
         eventService.deleteEvent(eventId);
 
         return ResponseEntity.noContent().build();
+    }
+
+    /**
+    * Fetch event details using show ID.
+    *
+    * Returns 200 OK.
+    * Returns 404 Not Found if show doesn't exist.
+    */
+    @GetMapping("/shows/{showId}")
+    public ResponseEntity<ApiResponse<EventResponse>> getEventByShowId(
+            @PathVariable UUID showId
+    ) {
+
+        EventResponse response = eventService.getEventByShowId(showId);
+
+        return ResponseEntity.ok(
+                ApiResponse.ok(response)
+        );
     }
 }

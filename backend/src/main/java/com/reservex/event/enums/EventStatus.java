@@ -1,4 +1,4 @@
-package com.reservex.event.entity;
+package com.reservex.event.enums;
 
 /**
  * Lifecycle state of an event.
