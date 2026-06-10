@@ -8,12 +8,13 @@ import com.reservex.event.entity.Event;
 import com.reservex.event.mapper.EventMapper;
 import com.reservex.event.repository.EventRepository;
 import com.reservex.event.service.EventService;
+import com.reservex.show.repository.ShowRepository;
+import com.reservex.show.entity.Show;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-
 import java.util.List;
 import java.util.UUID;
 
@@ -24,6 +25,7 @@ public class EventServiceImpl implements EventService {
 
     private final EventRepository eventRepository;
     private final EventMapper eventMapper;
+    private final ShowRepository showRepository;
 
      // ── POST /api/v1/events ───────────────────────────────────────────────────
     
@@ -116,7 +118,6 @@ public class EventServiceImpl implements EventService {
      * Throws:
      *   404 NOT_FOUND if event does not exist.
      */
-    
     private Event getEventOrThrow(UUID eventId) {
 
         return eventRepository.findById(eventId)
@@ -128,4 +129,23 @@ public class EventServiceImpl implements EventService {
                         )
                 );
     }
+
+    /**
+    * Get event details using show ID.
+    */
+    @Override
+    @Transactional(readOnly = true)
+    public EventResponse getEventByShowId(UUID showId) {
+
+        Show show = showRepository.findById(showId)
+                .orElseThrow(() ->
+                        new AppException(
+                                HttpStatus.NOT_FOUND,
+                                "SHOW_NOT_FOUND",
+                                "Show not found"
+                        )
+                );
+
+        return eventMapper.toResponse(show.getEvent());
+    }    
 }

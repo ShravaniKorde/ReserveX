@@ -4,7 +4,10 @@ import jakarta.persistence.*;
 import lombok.*;
 import org.hibernate.annotations.CreationTimestamp;
 import org.hibernate.annotations.UpdateTimestamp;
-
+import com.reservex.event.enums.EventStatus;
+import com.reservex.event.enums.EventCategory;
+import com.reservex.show.entity.Show;
+import java.util.List;
 import java.time.Instant;
 import java.util.UUID;
 
@@ -59,6 +62,12 @@ public class Event {
     @UpdateTimestamp
     @Column(name = "updated_at")
     private Instant updatedAt;
+
+    @OneToMany(
+        mappedBy = "event",
+        cascade = CascadeType.ALL
+    )
+    private List<Show> shows;
 }
 
 

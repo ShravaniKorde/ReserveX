@@ -29,4 +29,7 @@ public interface EventService {
 
     /** Delete an event by ID. */
     void deleteEvent(UUID eventId);
+
+    /** Get event details using show ID. */
+    EventResponse getEventByShowId(UUID showId);
 }

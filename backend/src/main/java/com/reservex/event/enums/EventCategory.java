@@ -1,4 +1,4 @@
-package com.reservex.event.entity;
+package com.reservex.event.enums;
 
 /**
  * Supported event categories.
