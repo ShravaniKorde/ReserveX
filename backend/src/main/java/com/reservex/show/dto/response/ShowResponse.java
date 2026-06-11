@@ -14,7 +14,7 @@ public class ShowResponse {
 
     private String eventId;
 
-    private String venueId;
+    private String screenId;
 
     private String startTime;
 

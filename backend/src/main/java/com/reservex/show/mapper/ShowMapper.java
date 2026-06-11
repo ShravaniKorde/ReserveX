@@ -16,7 +16,7 @@ public class ShowMapper {
         return ShowResponse.builder()
                 .showId(show.getId().toString())
                 .eventId(show.getEvent().getId().toString())
-                .venueId(show.getVenueId().toString())
+                .screenId(show.getScreen().getId().toString())
                 .startTime(DateUtil.formatUtc(show.getStartTime()))
                 .endTime(DateUtil.formatUtc(show.getEndTime()))
                 .status(show.getShow_status().name())

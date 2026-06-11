@@ -1,5 +1,7 @@
 package com.reservex.inventory.dto.response;
 
+import com.reservex.inventory.enums.SeatType;
+
 import lombok.Builder;
 import lombok.Getter;
 
@@ -13,7 +15,7 @@ public class ShowSeatResponse {
 
     private String seatNumber;
 
-    private String seatType;
+    private SeatType seatType;
 
     private String price;
 
