@@ -22,117 +22,144 @@ import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 
 import java.util.List;
 
-/**
- * Central Spring Security configuration.
- *
- * Route policy (mirrors the API spec Auth column):
- *
- *   PUBLIC  — /api/v1/auth/** (register, login, refresh, forgot/reset password, check-email)
- *           — GET /api/v1/events/**   (all event browsing)
- *           — GET /api/v1/inventory/shows/*//**availability  (listing page badge)
- *           — Swagger UI + OpenAPI docs
- *
- *   AUTH    — everything else requires a valid JWT
- */
 @Configuration
 @EnableWebSecurity
 @RequiredArgsConstructor
 public class SecurityConfig {
 
-    private final JwtAuthFilter            jwtAuthFilter;
+    private final JwtAuthFilter jwtAuthFilter;
     private final CustomUserDetailsService userDetailsService;
-
-    // ── filter chain ──────────────────────────────────────────────────────────
 
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
+
         http
-            // stateless REST API — no CSRF, no sessions
-            .csrf(AbstractHttpConfigurer::disable)
-            .sessionManagement(s -> s.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
-            .cors(c -> c.configurationSource(corsConfigurationSource()))
+                .csrf(AbstractHttpConfigurer::disable)
 
-            .authorizeHttpRequests(auth -> auth
+                .sessionManagement(session ->
+                        session.sessionCreationPolicy(SessionCreationPolicy.STATELESS)
+                )
 
-                // ── Swagger / OpenAPI ───────────────────────────────────────
-                .requestMatchers(
-                    "/swagger-ui/**",
-                    "/swagger-ui.html",
-                    "/v3/api-docs/**"
-                ).permitAll()
+                .cors(cors ->
+                        cors.configurationSource(corsConfigurationSource())
+                )
 
-                // ── Auth Service — PUBLIC endpoints ─────────────────────────
-                .requestMatchers(
-                    "/api/v1/auth/register",
-                    "/api/v1/auth/login",
-                    "/api/v1/auth/refresh",
-                    "/api/v1/auth/forgot-password",
-                    "/api/v1/auth/reset-password",
-                    "/api/v1/auth/check-email"
-                ).permitAll()
+                .authorizeHttpRequests(auth -> auth
 
-                // ── Event Service — all GET endpoints are PUBLIC ─────────────
-                .requestMatchers(HttpMethod.GET, "/api/v1/events/**").permitAll()
+                        // Swagger
+                        .requestMatchers(
+                                "/swagger-ui/**",
+                                "/swagger-ui.html",
+                                "/v3/api-docs/**"
+                        ).permitAll()
 
-                 // TEMPORARY FOR DEVELOPMENT
-                .requestMatchers(HttpMethod.POST, "/api/v1/events/**").permitAll()
-                .requestMatchers(HttpMethod.PUT, "/api/v1/events/**").permitAll()
-                .requestMatchers(HttpMethod.DELETE, "/api/v1/events/**").permitAll()
+                        // Auth APIs
+                        .requestMatchers(
+                                "/api/v1/auth/register",
+                                "/api/v1/auth/login",
+                                "/api/v1/auth/refresh",
+                                "/api/v1/auth/forgot-password",
+                                "/api/v1/auth/reset-password",
+                                "/api/v1/auth/check-email"
+                        ).permitAll()
 
-                // ── Inventory — availability summary is PUBLIC ───────────────
-                .requestMatchers(
-                    HttpMethod.GET,
-                    "/api/v1/inventory/shows/*/availability"
-                ).permitAll()
+                        // Event browsing APIs (PUBLIC)
+                        .requestMatchers(
+                                HttpMethod.GET,
+                                "/api/v1/events/**"
+                        ).permitAll()
 
-                // ── Payment webhook is PUBLIC (HMAC verified in service) ─────
-                .requestMatchers(HttpMethod.POST, "/api/v1/payments/webhook").permitAll()
+                        // Inventory browsing APIs (PUBLIC)
+                        .requestMatchers(
+                                HttpMethod.GET,
+                                "/api/v1/inventory/shows/*/seats"
+                        ).permitAll()
 
-                // ── everything else requires a valid JWT ─────────────────────
-                .anyRequest().authenticated()
-            )
+                        // Payment webhook (PUBLIC)
+                        .requestMatchers(
+                                HttpMethod.POST,
+                                "/api/v1/payments/webhook"
+                        ).permitAll()
 
-            .authenticationProvider(authenticationProvider())
-            .addFilterBefore(jwtAuthFilter, UsernamePasswordAuthenticationFilter.class);
+                        // TEMP DEVELOPMENT ONLY
+                        .requestMatchers(
+                                HttpMethod.POST,
+                                "/api/v1/events/**"
+                        ).permitAll()
+
+                        .requestMatchers(
+                                HttpMethod.PUT,
+                                "/api/v1/events/**"
+                        ).permitAll()
+
+                        .requestMatchers(
+                                HttpMethod.DELETE,
+                                "/api/v1/events/**"
+                        ).permitAll()
+
+                        // Everything else requires JWT
+                        .anyRequest().authenticated()
+                )
+
+                .authenticationProvider(authenticationProvider())
+                .addFilterBefore(
+                        jwtAuthFilter,
+                        UsernamePasswordAuthenticationFilter.class
+                );
 
         return http.build();
     }
 
-    // ── authentication provider (DAO + bcrypt) ────────────────────────────────
-
     @Bean
     public AuthenticationProvider authenticationProvider() {
-        var provider = new DaoAuthenticationProvider();
+
+        DaoAuthenticationProvider provider =
+                new DaoAuthenticationProvider();
+
         provider.setUserDetailsService(userDetailsService);
         provider.setPasswordEncoder(passwordEncoder());
+
         return provider;
     }
 
     @Bean
-    public AuthenticationManager authenticationManager(AuthenticationConfiguration config)
-            throws Exception {
+    public AuthenticationManager authenticationManager(
+            AuthenticationConfiguration config
+    ) throws Exception {
+
         return config.getAuthenticationManager();
     }
 
     @Bean
     public PasswordEncoder passwordEncoder() {
-        return new BCryptPasswordEncoder(12);   // cost factor 12 as per spec
+        return new BCryptPasswordEncoder(12);
     }
-
-    // ── CORS ──────────────────────────────────────────────────────────────────
 
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
-        var config = new CorsConfiguration();
-        config.setAllowedOriginPatterns(List.of("*"));   // tighten in production
-        config.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
+
+        CorsConfiguration config = new CorsConfiguration();
+
+        config.setAllowedOriginPatterns(List.of("*"));
+        config.setAllowedMethods(
+                List.of(
+                        "GET",
+                        "POST",
+                        "PUT",
+                        "PATCH",
+                        "DELETE",
+                        "OPTIONS"
+                )
+        );
+
         config.setAllowedHeaders(List.of("*"));
         config.setAllowCredentials(true);
 
-        
+        UrlBasedCorsConfigurationSource source =
+                new UrlBasedCorsConfigurationSource();
 
-        var source = new UrlBasedCorsConfigurationSource();
         source.registerCorsConfiguration("/**", config);
+
         return source;
     }
 }
