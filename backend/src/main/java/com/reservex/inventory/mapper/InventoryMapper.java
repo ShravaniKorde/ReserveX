@@ -11,9 +11,9 @@ public class InventoryMapper {
 
         return ShowSeatResponse.builder()
                 .seatId(seat.getId().toString())
-                .rowNumber(seat.getRowNumber())
-                .seatNumber(seat.getSeatNumber())
-                .seatType(seat.getSeatType())
+                .rowNumber(seat.getSeat().getRowNumber())
+                .seatNumber(seat.getSeat().getSeatNumber())
+                .seatType(seat.getSeat().getSeatType())
                 .price(seat.getPrice().toString())
                 .status(seat.getStatus().name())
                 .build();

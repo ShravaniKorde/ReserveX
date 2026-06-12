@@ -31,14 +31,12 @@ public class ShowSeat {
     )
     private Show show;
 
-    @Column(name = "row_number", nullable = false)
-    private String rowNumber;
-
-    @Column(name = "seat_number", nullable = false)
-    private String seatNumber;
-
-    @Column(name = "seat_type", nullable = false)
-    private String seatType;
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(
+            name = "seat_id",
+            nullable = false
+    )
+    private Seat seat;
 
     @Column(nullable = false)
     private BigDecimal price;

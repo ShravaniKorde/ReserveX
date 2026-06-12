@@ -1,6 +1,7 @@
 package com.reservex.show.entity;
 
 import com.reservex.event.entity.Event;
+import com.reservex.screen.entity.Screen;
 import com.reservex.show.enums.ShowStatus;
 import jakarta.persistence.*;
 import lombok.*;
@@ -48,13 +49,12 @@ public class Show {
     )
     private Event event;
 
-    /**
-     * Venue will be created later.
-     *
-     * Storing UUID for now.
-     */
-    @Column(name = "venue_id", nullable = false)
-    private UUID venueId;
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(
+        name = "screen_id",
+        nullable = false
+    )
+    private Screen screen;
 
     @Column(name = "start_time", nullable = false)
     private Instant startTime;
