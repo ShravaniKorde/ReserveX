@@ -3,6 +3,7 @@ package com.reservex.inventory.service.impl;
 import com.reservex.common.exception.AppException;
 import com.reservex.inventory.dto.request.LockSeatsRequest;
 import com.reservex.inventory.dto.response.LockSeatResponse;
+import com.reservex.inventory.dto.response.LockedSeat;
 import com.reservex.inventory.dto.response.ShowSeatResponse;
 import com.reservex.inventory.entity.SeatLock;
 import com.reservex.inventory.entity.ShowSeat;
@@ -21,6 +22,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 
@@ -36,64 +38,80 @@ public class InventoryServiceImpl implements InventoryService {
     @Override
     public List<ShowSeatResponse> getSeats(UUID showId) {
 
-        // return showSeatRepository.findByShow_Id(showId)
-        // .stream()
-        // .map(inventoryMapper::toResponse)
-        // .toList();
-
         log.info("Fetching seats for showId={}", showId);
-        List<ShowSeatResponse> seats = showSeatRepository.findByShow_Id(showId)
-            .stream()
-            .map(inventoryMapper::toResponse)
-            .toList();
 
-        log.info("Found {} seats for showId={}", seats.size(), showId);
+        List<ShowSeatResponse> seats =
+                showSeatRepository.findByShow_Id(showId)
+                        .stream()
+                        .map(inventoryMapper::toResponse)
+                        .toList();
+
+        log.info(
+                "Found {} seats for showId={}",
+                seats.size(),
+                showId
+        );
+
         return seats;
     }
 
     @Override
     @Transactional
-    public LockSeatResponse lockSeats(UUID showId, UUID userId, LockSeatsRequest request) {
-        
-        log.info("Seat lock request received. showId={}, userId={}", showId, userId);
-         
-        if (request.getSeatIds() == null || request.getSeatIds().isEmpty()) {
-        
-            throw new AppException(
-                HttpStatus.BAD_REQUEST,
-                "SEAT_IDS_REQUIRED",
-                "At least one seat must be selected"
-            );
-        }   
+    public LockSeatResponse lockSeats(
+            UUID showId,
+            UUID userId,
+            LockSeatsRequest request
+    ) {
 
-        if (request.getSeatIds().size() > 1) {
+        log.info(
+                "Seat lock request received. showId={}, userId={}",
+                showId,
+                userId
+        );
+
+        if (request.getSeatIds() == null ||
+                request.getSeatIds().isEmpty()) {
 
             throw new AppException(
-                HttpStatus.BAD_REQUEST,
-                "MULTIPLE_SEATS_NOT_SUPPORTED",
-                "Only one seat can be locked per request"
+                    HttpStatus.BAD_REQUEST,
+                    "SEAT_IDS_REQUIRED",
+                    "At least one seat must be selected"
             );
         }
 
         Instant now = Instant.now();
 
-        UUID seatId = request.getSeatIds().get(0);
-            log.info( "Attempting to lock seatId={} for showId={}", seatId, showId);
-            
+        List<LockedSeat> lockedSeats = new ArrayList<>();
+
+        for (UUID seatId : request.getSeatIds()) {
+
+            log.info(
+                    "Attempting to lock seatId={} for showId={}",
+                    seatId,
+                    showId
+            );
+
             ShowSeat showSeat =
                     showSeatRepository
-                            .findByShow_IdAndSeat_Id(showId, seatId)
+                            .findByShow_IdAndSeat_Id(
+                                    showId,
+                                    seatId
+                            )
                             .orElseThrow(() ->
                                     new AppException(
                                             HttpStatus.NOT_FOUND,
                                             "SEAT_NOT_FOUND",
                                             "Seat not found for show"
                                     )
-                                );
+                            );
 
             if (showSeat.getStatus() != SeatStatus.AVAILABLE) {
 
-                log.warn("Seat unavailable. seatId={}, currentStatus={}", seatId, showSeat.getStatus());
+                log.warn(
+                        "Seat unavailable. seatId={}, currentStatus={}",
+                        seatId,
+                        showSeat.getStatus()
+                );
 
                 throw new AppException(
                         HttpStatus.CONFLICT,
@@ -103,60 +121,110 @@ public class InventoryServiceImpl implements InventoryService {
             }
 
             showSeat.setStatus(SeatStatus.LOCKED);
-            // Hibernate dirty checking will persist this change automatically when transaction commits.
 
-            SeatLock lock = SeatLock.builder()
-                    .showSeat(showSeat)
-                    .userId(userId)
-                    .lockAcquiredAt(now)
-                    .lockExpiryAt(now.plusSeconds(300))
-                    .lockStatus(LockStatus.ACTIVE)
-                    .build();
+            SeatLock savedLock =
+                    seatLockRepository.save(
+                            SeatLock.builder()
+                                    .showSeat(showSeat)
+                                    .userId(userId)
+                                    .lockAcquiredAt(now)
+                                    .lockExpiryAt(
+                                            now.plusSeconds(300)
+                                    )
+                                    .lockStatus(
+                                            LockStatus.ACTIVE
+                                    )
+                                    .build()
+                    );
 
-            SeatLock savedLock = seatLockRepository.save(lock);
+            lockedSeats.add(
+                    LockedSeat.builder()
+                            .lockId(
+                                    savedLock.getId().toString()
+                            )
+                            .seatId(
+                                    seatId.toString()
+                            )
+                            .build()
+            );
 
-        log.info("Seat locked successfully. seatId={}, lockId={}, expiresAt={}", seatId, savedLock.getId(), savedLock.getLockExpiryAt());
+            log.info(
+                    "Seat locked successfully. seatId={}, lockId={}",
+                    seatId,
+                    savedLock.getId()
+            );
+        }
 
-        log.info("Seat locking completed. userId={}, lockId={}", userId, savedLock.getId());
+        log.info(
+                "Seat locking completed. userId={}, totalLocks={}",
+                userId,
+                lockedSeats.size()
+        );
 
         return LockSeatResponse.builder()
-            .lockId(savedLock.getId().toString())
-            .expiresAt(savedLock.getLockExpiryAt().toString())
-            .build();
+                .locks(lockedSeats)
+                .expiresAt(
+                        now.plusSeconds(300).toString()
+                )
+                .build();
     }
 
     @Override
     @Transactional
     public void releaseLock(UUID lockId) {
-        log.info("Lock release requested. lockId={}", lockId);
+
+        log.info(
+                "Lock release requested. lockId={}",
+                lockId
+        );
+
         SeatLock lock =
                 seatLockRepository.findById(lockId)
                         .orElseThrow(() ->
                                 new AppException(
-                                    HttpStatus.NOT_FOUND,
-                                    "LOCK_NOT_FOUND",
-                                    "Lock not found"
+                                        HttpStatus.NOT_FOUND,
+                                        "LOCK_NOT_FOUND",
+                                        "Lock not found"
                                 )
                         );
 
-        log.info( "Active lock found. lockId={}, seatId={}", lock.getId(), lock.getShowSeat().getId());
-        
+        log.info(
+                "Active lock found. lockId={}, seatId={}",
+                lock.getId(),
+                lock.getShowSeat().getId()
+        );
+
         if (lock.getLockStatus() != LockStatus.ACTIVE) {
 
-            log.warn("Lock already inactive. lockId={}, status={}",lockId,lock.getLockStatus());
+            log.warn(
+                    "Lock already inactive. lockId={}, status={}",
+                    lockId,
+                    lock.getLockStatus()
+            );
 
             throw new AppException(
-                HttpStatus.BAD_REQUEST,
-                "LOCK_ALREADY_RELEASED",
-                "Lock is not active"
+                    HttpStatus.BAD_REQUEST,
+                    "LOCK_ALREADY_RELEASED",
+                    "Lock is not active"
             );
         }
 
-        lock.setLockStatus(LockStatus.RELEASED);
+        lock.setLockStatus(
+                LockStatus.RELEASED
+        );
+
         ShowSeat seat = lock.getShowSeat();
-        seat.setStatus(SeatStatus.AVAILABLE);
-        // Hibernate dirty checking will persist this change automatically when transaction commits.
+
+        seat.setStatus(
+                SeatStatus.AVAILABLE
+        );
+
         seatLockRepository.save(lock);
-        log.info("Lock released successfully. lockId={}, seatId={}",lock.getId(),seat.getId());
+
+        log.info(
+                "Lock released successfully. lockId={}, seatId={}",
+                lock.getId(),
+                seat.getId()
+        );
     }
 }
