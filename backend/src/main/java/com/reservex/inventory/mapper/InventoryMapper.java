@@ -10,7 +10,11 @@ public class InventoryMapper {
     public ShowSeatResponse toResponse(ShowSeat seat) {
 
         return ShowSeatResponse.builder()
-                .seatId(seat.getId().toString())
+                .seatId(
+                        seat.getSeat()
+                                .getId()
+                                .toString()
+                )
                 .rowNumber(seat.getSeat().getRowNumber())
                 .seatNumber(seat.getSeat().getSeatNumber())
                 .seatType(seat.getSeat().getSeatType())
