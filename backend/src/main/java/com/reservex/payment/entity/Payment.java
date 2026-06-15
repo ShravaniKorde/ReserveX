@@ -1,7 +1,8 @@
-package com.reservex.booking.entity;
+package com.reservex.payment.entity;
 
-import com.reservex.booking.enums.BookingStatus;
-import com.reservex.show.entity.Show;
+import com.reservex.booking.entity.Booking;
+import com.reservex.payment.enums.PaymentMethod;
+import com.reservex.payment.enums.PaymentStatus;
 
 import jakarta.persistence.*;
 import lombok.*;
@@ -13,46 +14,48 @@ import java.time.Instant;
 import java.util.UUID;
 
 @Entity
-@Table(name = "bookings")
+@Table(name = "payments")
 @Getter
 @Setter
 @NoArgsConstructor
 @AllArgsConstructor
 @Builder
-public class Booking {
+public class Payment {
 
     @Id
     @GeneratedValue(strategy = GenerationType.UUID)
     private UUID id;
 
-    @Column(name = "user_id", nullable = false)
-    private UUID userId;
-
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(
-            name = "show_id",
+            name = "booking_id",
             nullable = false
     )
-    private Show show;
+    private Booking booking;
+
+    @Column(nullable = false)
+    private BigDecimal amount;
 
     @Enumerated(EnumType.STRING)
     @Column(
-            name = "booking_status",
+            name = "payment_method",
             nullable = false
     )
-    private BookingStatus bookingStatus;
+    private PaymentMethod paymentMethod;
+
+    @Enumerated(EnumType.STRING)
+    @Column(
+            name = "payment_status",
+            nullable = false
+    )
+    private PaymentStatus paymentStatus;
 
     @Column(
-            name = "total_amount",
-            nullable = false
+            name = "transaction_reference",
+            nullable = false,
+            unique = true
     )
-    private BigDecimal totalAmount;
-
-    @Column(
-            name = "booked_at",
-            nullable = false
-    )
-    private Instant bookedAt;
+    private String transactionReference;
 
     @CreationTimestamp
     @Column(
