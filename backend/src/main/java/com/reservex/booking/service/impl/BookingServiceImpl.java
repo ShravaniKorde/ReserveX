@@ -16,6 +16,7 @@ import com.reservex.inventory.enums.SeatStatus;
 import com.reservex.inventory.repository.SeatLockRepository;
 import com.reservex.show.entity.Show;
 import com.reservex.show.repository.ShowRepository;
+import com.reservex.notification.service.NotificationService;
 
 import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
@@ -39,6 +40,7 @@ public class BookingServiceImpl implements BookingService {
     private final SeatLockRepository seatLockRepository;
     private final ShowRepository showRepository;
     private final BookingMapper bookingMapper;
+    private final NotificationService notificationService;
 
       /*
     Purpose:
@@ -58,12 +60,12 @@ public class BookingServiceImpl implements BookingService {
     Return booking details
     */
 
-    @Override
-    @Transactional
-    public BookingResponse createBooking(
-            UUID userId,
-            UUID showId
-    ) {
+        @Override
+        @Transactional
+        public BookingResponse createBooking(
+                UUID userId,
+                UUID showId
+        ) {
 
         log.info(
                 "Booking creation started. userId={}, showId={}",
@@ -71,7 +73,6 @@ public class BookingServiceImpl implements BookingService {
                 showId
         );
 
-        // Validate show exists
         Show show =
                 showRepository.findById(showId)
                         .orElseThrow(() ->
@@ -82,7 +83,6 @@ public class BookingServiceImpl implements BookingService {
                                 )
                         );
 
-        // Fetch all active seat locks for user and show
         List<SeatLock> activeLocks =
                 seatLockRepository
                         .findByUserIdAndShowSeat_Show_IdAndLockStatus(
@@ -93,40 +93,42 @@ public class BookingServiceImpl implements BookingService {
 
         if (activeLocks.isEmpty()) {
 
-            throw new AppException(
-                    HttpStatus.BAD_REQUEST,
-                    "NO_ACTIVE_LOCKS",
-                    "No active seat locks found"
-            );
+                throw new AppException(
+                        HttpStatus.BAD_REQUEST,
+                        "NO_ACTIVE_LOCKS",
+                        "No active seat locks found"
+                );
         }
 
         Instant now = Instant.now();
 
-        // Validate lock expiry
         for (SeatLock lock : activeLocks) {
 
-            if (lock.getLockExpiryAt().isBefore(now)) {
+                if (lock.getLockExpiryAt().isBefore(now)) {
+
+                log.warn(
+                        "Expired lock detected. lockId={}",
+                        lock.getId()
+                );
 
                 throw new AppException(
                         HttpStatus.BAD_REQUEST,
                         "LOCK_EXPIRED",
                         "One or more seat locks have expired"
                 );
-            }
+                }
         }
 
-        // Calculate total booking amount
         BigDecimal totalAmount = BigDecimal.ZERO;
 
         for (SeatLock lock : activeLocks) {
 
-            totalAmount =
-                    totalAmount.add(
-                            lock.getShowSeat().getPrice()
-                    );
+                totalAmount =
+                        totalAmount.add(
+                                lock.getShowSeat().getPrice()
+                        );
         }
 
-        // Create booking record
         Booking booking =
                 bookingRepository.save(
                         Booking.builder()
@@ -145,26 +147,25 @@ public class BookingServiceImpl implements BookingService {
                 booking.getId()
         );
 
-        // Create booking-seat mappings and mark seats as booked
         for (SeatLock lock : activeLocks) {
 
-            ShowSeat showSeat =
-                    lock.getShowSeat();
+                ShowSeat showSeat =
+                        lock.getShowSeat();
 
-            showSeat.setStatus(
-                    SeatStatus.BOOKED
-            );
+                showSeat.setStatus(
+                        SeatStatus.BOOKED
+                );
 
-            lock.setLockStatus(
-                    LockStatus.RELEASED
-            );
+                lock.setLockStatus(
+                        LockStatus.RELEASED
+                );
 
-            bookingSeatRepository.save(
-                    BookingSeat.builder()
-                            .booking(booking)
-                            .showSeat(showSeat)
-                            .build()
-            );
+                bookingSeatRepository.save(
+                        BookingSeat.builder()
+                                .booking(booking)
+                                .showSeat(showSeat)
+                                .build()
+                );
         }
 
         List<BookingSeat> bookingSeats =
@@ -177,12 +178,17 @@ public class BookingServiceImpl implements BookingService {
                 booking.getId(),
                 bookingSeats.size()
         );
+        notificationService.createNotification(
+        userId,
+        "Booking Confirmed",
+        "Your booking has been confirmed."
+);
 
         return bookingMapper.toResponse(
                 booking,
                 bookingSeats
         );
-    }
+        }
 
         /*
         Purpose:
