@@ -8,13 +8,16 @@ import com.reservex.event.entity.Event;
 import com.reservex.event.mapper.EventMapper;
 import com.reservex.event.repository.EventRepository;
 import com.reservex.event.service.EventService;
-import com.reservex.show.repository.ShowRepository;
 import com.reservex.show.entity.Show;
+import com.reservex.show.repository.ShowRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+
 import java.util.List;
 import java.util.UUID;
 
@@ -27,11 +30,15 @@ public class EventServiceImpl implements EventService {
     private final EventMapper eventMapper;
     private final ShowRepository showRepository;
 
-     // ── POST /api/v1/events ───────────────────────────────────────────────────
-    
     @Override
+    @CacheEvict(
+            value = {"event"},
+            allEntries = true
+    )
     @Transactional
-    public EventResponse createEvent(CreateEventRequest request) {
+    public EventResponse createEvent(
+            CreateEventRequest request
+    ) {
 
         Event event = Event.builder()
                 .title(request.getTitle())
@@ -44,27 +51,42 @@ public class EventServiceImpl implements EventService {
 
         Event saved = eventRepository.save(event);
 
-        log.info("Event created: {} ({})", saved.getTitle(), saved.getId());
+        log.info(
+                "Event created: {} ({})",
+                saved.getTitle(),
+                saved.getId()
+        );
 
         return eventMapper.toResponse(saved);
     }
 
-     // ── GET /api/v1/events/{eventId} ─────────────────────────────────────────
-
     @Override
+    @Cacheable(
+            value = "event",
+            key = "#eventId"
+    )
     @Transactional(readOnly = true)
-    public EventResponse getEvent(UUID eventId) {
+    public EventResponse getEvent(
+            UUID eventId
+    ) {
+
+        log.info(
+                "Fetching event from DB. eventId={}",
+                eventId
+        );
 
         Event event = getEventOrThrow(eventId);
 
         return eventMapper.toResponse(event);
     }
 
-     // ── GET /api/v1/events ───────────────────────────────────────────────────
-
     @Override
     @Transactional(readOnly = true)
     public List<EventResponse> getAllEvents() {
+
+        log.info(
+                "Fetching all events from DB"
+        );
 
         return eventRepository.findAll()
                 .stream()
@@ -72,9 +94,11 @@ public class EventServiceImpl implements EventService {
                 .toList();
     }
 
-    // ── PUT /api/v1/events/{eventId} ─────────────────────────────────────────
-
     @Override
+    @CacheEvict(
+            value = {"event"},
+            allEntries = true
+    )
     @Transactional
     public EventResponse updateEvent(
             UUID eventId,
@@ -88,37 +112,47 @@ public class EventServiceImpl implements EventService {
         event.setCategory(request.getCategory());
         event.setLanguage(request.getLanguage());
         event.setEventStatus(request.getEventStatus());
-        event.setDurationMinutes(request.getDurationMinutes());
+        event.setDurationMinutes(
+                request.getDurationMinutes()
+        );
 
-        Event updated = eventRepository.save(event);
+        Event updated =
+                eventRepository.save(event);
 
-        log.info("Event updated: {} ({})", updated.getTitle(), updated.getId());
+        log.info(
+                "Event updated: {} ({})",
+                updated.getTitle(),
+                updated.getId()
+        );
 
         return eventMapper.toResponse(updated);
     }
 
-    // ── DELETE /api/v1/events/{eventId} ──────────────────────────────────────
-
     @Override
+    @CacheEvict(
+            value = {"event"},
+            allEntries = true
+    )
     @Transactional
-    public void deleteEvent(UUID eventId) {
+    public void deleteEvent(
+            UUID eventId
+    ) {
 
-        Event event = getEventOrThrow(eventId);
+        Event event =
+                getEventOrThrow(eventId);
 
         eventRepository.delete(event);
 
-        log.info("Event deleted: {} ({})", event.getTitle(), event.getId());
+        log.info(
+                "Event deleted: {} ({})",
+                event.getTitle(),
+                event.getId()
+        );
     }
 
-     // ── shared lookup helper ─────────────────────────────────────────────────
-
-    /**
-     * Returns an event if found.
-     *
-     * Throws:
-     *   404 NOT_FOUND if event does not exist.
-     */
-    private Event getEventOrThrow(UUID eventId) {
+    private Event getEventOrThrow(
+            UUID eventId
+    ) {
 
         return eventRepository.findById(eventId)
                 .orElseThrow(() ->
@@ -130,22 +164,24 @@ public class EventServiceImpl implements EventService {
                 );
     }
 
-    /**
-    * Get event details using show ID.
-    */
     @Override
     @Transactional(readOnly = true)
-    public EventResponse getEventByShowId(UUID showId) {
+    public EventResponse getEventByShowId(
+            UUID showId
+    ) {
 
-        Show show = showRepository.findById(showId)
-                .orElseThrow(() ->
-                        new AppException(
-                                HttpStatus.NOT_FOUND,
-                                "SHOW_NOT_FOUND",
-                                "Show not found"
-                        )
-                );
+        Show show =
+                showRepository.findById(showId)
+                        .orElseThrow(() ->
+                                new AppException(
+                                        HttpStatus.NOT_FOUND,
+                                        "SHOW_NOT_FOUND",
+                                        "Show not found"
+                                )
+                        );
 
-        return eventMapper.toResponse(show.getEvent());
-    }    
+        return eventMapper.toResponse(
+                show.getEvent()
+        );
+    }
 }
