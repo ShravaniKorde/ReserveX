@@ -3,13 +3,14 @@ package com.reservex.event.service.impl;
 import com.reservex.common.exception.AppException;
 import com.reservex.event.dto.request.CreateEventRequest;
 import com.reservex.event.dto.request.UpdateEventRequest;
+import com.reservex.event.dto.response.EventListResponse;
 import com.reservex.event.dto.response.EventResponse;
 import com.reservex.event.entity.Event;
 import com.reservex.event.mapper.EventMapper;
 import com.reservex.event.repository.EventRepository;
 import com.reservex.event.service.EventService;
-import com.reservex.show.repository.ShowRepository;
 import com.reservex.show.entity.Show;
+import com.reservex.show.repository.ShowRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
@@ -19,7 +20,7 @@ import org.springframework.cache.annotation.Caching;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import java.util.List;
+
 import java.util.UUID;
 
 @Slf4j
@@ -32,10 +33,12 @@ public class EventServiceImpl implements EventService {
     private final ShowRepository showRepository;
 
      // ── POST /api/v1/events ───────────────────────────────────────────────────
-    @CacheEvict(value = "events", allEntries = true)
     @Override
+    @CacheEvict(value = "events:list", allEntries = true)
     @Transactional
-    public EventResponse createEvent(CreateEventRequest request) {
+    public EventResponse createEvent(
+            CreateEventRequest request
+    ) {
 
         log.info("Creating event: {}", request.getTitle());
 
@@ -56,11 +59,18 @@ public class EventServiceImpl implements EventService {
         return eventMapper.toResponse(saved);
     }
 
-     // ── GET /api/v1/events/{eventId} ─────────────────────────────────────────
-
+     // ── GET /api/v1/events/{eventId} ───────────────────────────────────────────────────
     @Override
+    @Cacheable(value = "events:id", key = "#eventId")
     @Transactional(readOnly = true)
-    public EventResponse getEvent(UUID eventId) {
+    public EventResponse getEvent(
+            UUID eventId
+    ) {
+
+        log.info(
+              "Cache MISS - Fetching event from DB. eventId={}",
+                eventId
+        );
 
         Event event = getEventOrThrow(eventId);
 
@@ -68,20 +78,32 @@ public class EventServiceImpl implements EventService {
     }
 
      // ── GET /api/v1/events ───────────────────────────────────────────────────
-
     @Override
-    @Transactional(readOnly = true)
-    public List<EventResponse> getAllEvents() {
+    @Cacheable(value = "events:list", key = "'all'")
+@Transactional(readOnly = true)
+public EventListResponse getAllEvents() {
 
-        return eventRepository.findAll()
-                .stream()
-                .map(eventMapper::toResponse)
-                .toList();
-    }
+    log.info("Cache MISS - Fetching all events from DB");
 
-    // ── PUT /api/v1/events/{eventId} ─────────────────────────────────────────
+    return EventListResponse.builder()
+            .events(
+                    eventRepository.findAll()
+                            .stream()
+                            .map(eventMapper::toResponse)
+                            .toList()
+            )
+            .build();
+}
 
+
+ // ── PUT /api/v1/events ───────────────────────────────────────────────────
     @Override
+@Caching(evict = {
+    @CacheEvict(value = "events:list", allEntries = true),
+    @CacheEvict(value = "events:id", key = "#eventId"),
+    @CacheEvict(value = "events:show",allEntries = true)
+})
+        
     @Transactional
     public EventResponse updateEvent(
             UUID eventId,
@@ -95,43 +117,63 @@ public class EventServiceImpl implements EventService {
         event.setCategory(request.getCategory());
         event.setLanguage(request.getLanguage());
         event.setEventStatus(request.getEventStatus());
-        event.setDurationMinutes(request.getDurationMinutes());
+        event.setDurationMinutes(
+                request.getDurationMinutes()
+        );
 
-        Event updated = eventRepository.save(event);
+        Event updated =
+                eventRepository.save(event);
 
-        log.info("Event updated: {} ({})", updated.getTitle(), updated.getId());
+        log.info(
+                "Event updated: {} ({})",
+                updated.getTitle(),
+                updated.getId()
+        );
 
         return eventMapper.toResponse(updated);
     }
 
     // ── DELETE /api/v1/events/{eventId} ──────────────────────────────────────
-
-    @Caching(evict = {
-                @CacheEvict(value = "events", allEntries = true),
-                @CacheEvict(value = "eventByShow", allEntries = true)
-        })
+    
     @Override
+    @Caching(evict = {
+    @CacheEvict(value = "events:list", allEntries = true),
+    @CacheEvict(value = "events:id", key = "#eventId")
+})
     @Transactional
-    public void deleteEvent(UUID eventId) {
+    public void deleteEvent(
+            UUID eventId
+    ) {
 
         log.info("Deleting event with id={}", eventId);
         Event event = getEventOrThrow(eventId);
 
+        if (showRepository.existsByEventId(eventId)) {
+
+                   log.warn(
+            "Delete failed. Event {} has associated shows",
+            eventId
+    );
+
+    throw new AppException(
+            HttpStatus.BAD_REQUEST,
+            "EVENT_HAS_SHOWS",
+            "Cannot delete event with existing shows"
+    );
+}
+
         eventRepository.delete(event);
 
-        log.info("Event deleted: {} ({})", event.getTitle(), event.getId());
-        log.info("Evicting caches: events, eventByShow");
+        log.info(
+                "Event deleted: {} ({})",
+                event.getTitle(),
+                event.getId()
+        );
     }
 
-     // ── shared lookup helper ─────────────────────────────────────────────────
-
-    /**
-     * Returns an event if found.
-     *
-     * Throws:
-     *   404 NOT_FOUND if event does not exist.
-     */
-    private Event getEventOrThrow(UUID eventId) {
+    private Event getEventOrThrow(
+            UUID eventId
+    ) {
 
         return eventRepository.findById(eventId)
                 .orElseThrow(() ->
@@ -146,10 +188,12 @@ public class EventServiceImpl implements EventService {
     /**
     * Get event details using show ID.
     */
-   @Cacheable(value = "eventByShow", key = "#showId")
+    @Cacheable(value = "events:show", key = "#showId")
     @Override
     @Transactional(readOnly = true)
-    public EventResponse getEventByShowId(UUID showId) {
+    public EventResponse getEventByShowId(
+            UUID showId
+    ) {
 
         log.info("Cache MISS - Fetching event from DB for showId={}", showId);
 
@@ -162,6 +206,8 @@ public class EventServiceImpl implements EventService {
                         )
                 );
 
-        return eventMapper.toResponse(show.getEvent());
-    }    
+        return eventMapper.toResponse(
+                show.getEvent()
+        );
+    }
 }

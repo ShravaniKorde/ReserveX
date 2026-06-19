@@ -1,9 +1,11 @@
 package com.reservex.event.dto.response;
 
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+
+import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Getter;
 import lombok.Setter;
-import lombok.AllArgsConstructor;
 import lombok.NoArgsConstructor;
 
 /**
@@ -28,6 +30,7 @@ import lombok.NoArgsConstructor;
  *   "updated_at":       "2026-06-01T10:00:00Z"
  * }
  */
+
 @Getter
 @Setter
 @Builder
@@ -57,6 +60,7 @@ import lombok.NoArgsConstructor;
 // Generates constructor with all fields.
 // Useful for object creation and serialization frameworks.
 @AllArgsConstructor
+@JsonIgnoreProperties(ignoreUnknown = true)
 public class EventResponse {
 
     private String eventId;
