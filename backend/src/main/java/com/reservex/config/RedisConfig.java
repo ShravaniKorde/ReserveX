@@ -26,13 +26,23 @@ public class RedisConfig {
 
         RedisCacheConfiguration configuration =
                 RedisCacheConfiguration.defaultCacheConfig()
+
+                        // Cache entries automatically expire after 10 minutes.
+                        // Prevents stale data from living forever in Redis.
                         .entryTtl(Duration.ofMinutes(10))
+
+                        // Store cached objects as JSON.
+                        // Allows DTOs to be serialized/deserialized cleanly.
                         .serializeValuesWith(
                                 RedisSerializationContext
                                         .SerializationPair
                                         .fromSerializer(serializer)
                         );
 
+        // Creates Redis-backed CacheManager used by:
+        // @Cacheable
+        // @CacheEvict
+        // @CachePut
         return RedisCacheManager.builder(connectionFactory)
                 .cacheDefaults(configuration)
                 .transactionAware()

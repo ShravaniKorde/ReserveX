@@ -3,6 +3,7 @@ package com.reservex.event.controller;
 import com.reservex.common.response.ApiResponse;
 import com.reservex.event.dto.request.CreateEventRequest;
 import com.reservex.event.dto.request.UpdateEventRequest;
+import com.reservex.event.dto.response.EventListResponse;
 import com.reservex.event.dto.response.EventResponse;
 import com.reservex.event.service.EventService;
 import jakarta.validation.Valid;
@@ -61,9 +62,9 @@ public class EventController {
      * Returns 200 OK.
      */
     @GetMapping
-    public ResponseEntity<ApiResponse<List<EventResponse>>> getAllEvents() {
+    public ResponseEntity<ApiResponse<EventListResponse>> getAllEvents() {
 
-        List<EventResponse> response = eventService.getAllEvents();
+        EventListResponse response = eventService.getAllEvents();
 
         return ResponseEntity.ok(ApiResponse.ok(response));
     }

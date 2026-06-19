@@ -2,6 +2,7 @@ package com.reservex.event.service;
 
 import com.reservex.event.dto.request.CreateEventRequest;
 import com.reservex.event.dto.request.UpdateEventRequest;
+import com.reservex.event.dto.response.EventListResponse;
 import com.reservex.event.dto.response.EventResponse;
 
 import java.util.List;
@@ -21,7 +22,7 @@ public interface EventService {
     EventResponse getEvent(UUID eventId);
 
     /** Return all available events. */
-    List<EventResponse> getAllEvents();
+    EventListResponse getAllEvents();
 
     /** Update an existing event. */
     EventResponse updateEvent(UUID eventId, UpdateEventRequest request);
