@@ -13,6 +13,7 @@ import com.reservex.inventory.mapper.InventoryMapper;
 import com.reservex.inventory.repository.SeatLockRepository;
 import com.reservex.inventory.repository.ShowSeatRepository;
 import com.reservex.inventory.service.InventoryService;
+import com.reservex.inventory.service.SeatLockRedisService;
 
 import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
@@ -34,6 +35,7 @@ public class InventoryServiceImpl implements InventoryService {
     private final ShowSeatRepository showSeatRepository;
     private final InventoryMapper inventoryMapper;
     private final SeatLockRepository seatLockRepository;
+    private final SeatLockRedisService seatLockRedisService;
 
     @Override
     public List<ShowSeatResponse> getSeats(UUID showId) {
@@ -119,6 +121,22 @@ public class InventoryServiceImpl implements InventoryService {
                         "Seat is already locked or booked"
                 );
             }
+
+            boolean locked =
+        seatLockRedisService.lockSeat(
+                showId,
+                seatId,
+                userId
+        );
+
+        if (!locked) {
+
+        throw new AppException(
+                HttpStatus.CONFLICT,
+                "SEAT_ALREADY_LOCKED",
+                "Seat already locked by another user"
+        );
+        }
 
             showSeat.setStatus(SeatStatus.LOCKED);
 
