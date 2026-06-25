@@ -10,21 +10,37 @@ import org.springframework.data.redis.connection.RedisConnectionFactory;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.redis.serializer.GenericJackson2JsonRedisSerializer;
 import org.springframework.data.redis.serializer.RedisSerializationContext;
+import org.springframework.data.redis.serializer.StringRedisSerializer;  
 
 import java.time.Duration;
 
+/**
+ * Redis configuration for:
+ *   1. Caching (CacheManager for @Cacheable, @CacheEvict)
+ *   2. Rate Limiting (StringRedisTemplate for counters)
+ */
 @Configuration
 @EnableCaching
 public class RedisConfig {
 
+    // ── Bean 1: StringRedisTemplate for Rate Limiting ───────────────────────────
+
+    /**
+     * Creates StringRedisTemplate for rate limiting.
+     * Used for storing simple string counters (e.g., "login:attempts:email@example.com" → "3").
+     */
     @Bean
-public StringRedisTemplate stringRedisTemplate(
-        RedisConnectionFactory connectionFactory
-) {
-    return new StringRedisTemplate(
-            connectionFactory
-    );
-}
+    public StringRedisTemplate stringRedisTemplateForRateLimit(
+            RedisConnectionFactory connectionFactory
+    ) {
+        StringRedisTemplate template = new StringRedisTemplate(connectionFactory);
+        
+        // Use String serializer for keys (readable in Redis CLI)
+        template.setKeySerializer(new StringRedisSerializer());
+        template.setValueSerializer(new StringRedisSerializer());
+        
+        return template;
+    }
 
     @Bean
     public CacheManager cacheManager(
