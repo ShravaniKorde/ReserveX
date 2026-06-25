@@ -54,4 +54,15 @@ public class AuthException extends AppException {
             "Token is invalid or has expired"
         );
     }
+
+    // Rate limit exception 
+
+    public static AuthException loginRateLimitExceeded(String email) {
+        return new AuthException(
+            HttpStatus.TOO_MANY_REQUESTS,
+            "RATE_LIMIT_EXCEEDED",
+            "Too many login attempts for email: " + email + 
+            ". Please try again after 10 minutes."
+        );
+    }
 }

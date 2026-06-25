@@ -16,6 +16,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import com.reservex.auth.service.RateLimitHandler;  
 
 import java.util.UUID;
 
@@ -28,6 +29,7 @@ public class AuthServiceImpl implements AuthService {
     private final PasswordEncoder passwordEncoder;
     private final JwtUtil jwtUtil;
     private final UserMapper userMapper;
+    private final RateLimitHandler rateLimitHandler;  
 
     // ── POST /api/v1/auth/register ────────────────────────────────────────────
 
@@ -68,6 +70,9 @@ public class AuthServiceImpl implements AuthService {
     @Override
     @Transactional(readOnly = true)
     public LoginResponse login(LoginRequest request) {
+
+        // Check rate limit BEFORE login 
+        rateLimitHandler.checkLoginRateLimit(request.getEmail()); 
 
         // 1. Look up user by email
         User user = userRepository.findByEmail(request.getEmail().toLowerCase().trim())
