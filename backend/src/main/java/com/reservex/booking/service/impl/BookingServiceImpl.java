@@ -17,6 +17,7 @@ import com.reservex.inventory.repository.SeatLockRepository;
 import com.reservex.show.entity.Show;
 import com.reservex.show.repository.ShowRepository;
 import com.reservex.notification.service.NotificationService;
+import com.reservex.inventory.service.SeatLockRedisService;
 
 import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
@@ -41,6 +42,7 @@ public class BookingServiceImpl implements BookingService {
     private final ShowRepository showRepository;
     private final BookingMapper bookingMapper;
     private final NotificationService notificationService;
+    private final SeatLockRedisService seatLockRedisService;
 
       /*
     Purpose:
@@ -104,20 +106,43 @@ public class BookingServiceImpl implements BookingService {
 
         for (SeatLock lock : activeLocks) {
 
-                if (lock.getLockExpiryAt().isBefore(now)) {
+                UUID redisShowId =
+                        lock.getShowSeat()
+                                .getShow()
+                                .getId();
 
-                log.warn(
-                        "Expired lock detected. lockId={}",
-                        lock.getId()
-                );
+                UUID redisSeatId =
+                        lock.getShowSeat()
+                                .getSeat()
+                                .getId();
 
-                throw new AppException(
-                        HttpStatus.BAD_REQUEST,
-                        "LOCK_EXPIRED",
-                        "One or more seat locks have expired"
-                );
+                if (!seatLockRedisService.isLocked(
+                        redisShowId,
+                        redisSeatId
+                )) {
+
+                        throw new AppException(
+                                HttpStatus.BAD_REQUEST,
+                                "LOCK_EXPIRED",
+                                "Seat lock has expired"
+                        );
                 }
-        }
+
+                String owner =
+                        seatLockRedisService.getLockOwner(
+                                redisShowId,
+                                redisSeatId
+                        );
+
+                if (!userId.toString().equals(owner)) {
+
+                        throw new AppException(
+                                HttpStatus.FORBIDDEN,
+                                "LOCK_OWNERSHIP_MISMATCH",
+                                "Seat lock belongs to another user"
+                        );
+                }
+                }
 
         BigDecimal totalAmount = BigDecimal.ZERO;
 
@@ -158,6 +183,11 @@ public class BookingServiceImpl implements BookingService {
 
                 lock.setLockStatus(
                         LockStatus.RELEASED
+                );
+
+                seatLockRedisService.unlockSeat(
+                        showSeat.getShow().getId(),
+                        showSeat.getSeat().getId()
                 );
 
                 bookingSeatRepository.save(

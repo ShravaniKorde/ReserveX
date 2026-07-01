@@ -24,4 +24,8 @@ public interface SeatLockRepository
                 UUID showId,
                 LockStatus lockStatus
         );
+
+        List<SeatLock> findByLockStatus(
+        LockStatus lockStatus
+        );
 }

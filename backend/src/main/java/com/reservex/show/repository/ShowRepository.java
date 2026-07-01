@@ -9,4 +9,6 @@ import java.util.UUID;
 @Repository
 public interface ShowRepository
         extends JpaRepository<Show, UUID> {
+
+                boolean existsByEventId(UUID eventId);
 }
