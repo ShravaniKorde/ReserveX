@@ -64,6 +64,26 @@ public class BookingServiceImpl implements BookingService {
     Return booking details
     */
 
+
+    //--------------------below is new one
+    /*
+Purpose:
+
+Convert locked seats into a booking awaiting payment.
+
+ACTIVE LOCKS
+        ↓
+Validate locks
+        ↓
+Create booking (PENDING_PAYMENT)
+        ↓
+Create booking seats
+        ↓
+Publish BookingCreatedEvent
+        ↓
+Payment service completes booking later
+*/
+
         @Override
         @Transactional
         public BookingResponse createBooking(
@@ -162,7 +182,7 @@ public class BookingServiceImpl implements BookingService {
                                 .userId(userId)
                                 .show(show)
                                 .bookingStatus(
-                                        BookingStatus.CONFIRMED
+                                        BookingStatus.PENDING_PAYMENT   //changed confirmed to pending
                                 )
                                 .totalAmount(totalAmount)
                                 .bookedAt(now)
@@ -174,29 +194,46 @@ public class BookingServiceImpl implements BookingService {
                 booking.getId()
         );
 
+        // for (SeatLock lock : activeLocks) {
+
+        //         ShowSeat showSeat =
+        //                 lock.getShowSeat();
+
+        //         showSeat.setStatus(
+        //                 SeatStatus.BOOKED
+        //         );
+
+        //         lock.setLockStatus(
+        //                 LockStatus.RELEASED
+        //         );
+
+        //         seatLockRedisService.unlockSeat(
+        //                 showSeat.getShow().getId(),
+        //                 showSeat.getSeat().getId()
+        //         );
+
+        //         bookingSeatRepository.save(
+        //                 BookingSeat.builder()
+        //                         .booking(booking)
+        //                         .showSeat(showSeat)
+        //                         .build()
+        //         );
+        // }
+
+        // Booking seats are created immediately.
+//
+// IMPORTANT:
+// Do NOT mark seats as BOOKED yet.
+// Do NOT release seat locks yet.
+// Those actions happen only after payment succeeds.
+
         for (SeatLock lock : activeLocks) {
 
-                ShowSeat showSeat =
-                        lock.getShowSeat();
-
-                showSeat.setStatus(
-                        SeatStatus.BOOKED
-                );
-
-                lock.setLockStatus(
-                        LockStatus.RELEASED
-                );
-
-                seatLockRedisService.unlockSeat(
-                        showSeat.getShow().getId(),
-                        showSeat.getSeat().getId()
-                );
-
-                bookingSeatRepository.save(
-                        BookingSeat.builder()
-                                .booking(booking)
-                                .showSeat(showSeat)
-                                .build()
+        bookingSeatRepository.save(
+            BookingSeat.builder()
+                    .booking(booking)
+                    .showSeat(lock.getShowSeat())
+                    .build()
                 );
         }
 
@@ -205,8 +242,14 @@ public class BookingServiceImpl implements BookingService {
                         booking
                 );
 
+        // log.info(
+        //         "Booking completed successfully. bookingId={}, seatsBooked={}",
+        //         booking.getId(),
+        //         bookingSeats.size()
+        // );
+
         log.info(
-                "Booking completed successfully. bookingId={}, seatsBooked={}",
+                "Booking created in PENDING_PAYMENT state. bookingId={}, seatCount={}",
                 booking.getId(),
                 bookingSeats.size()
         );
