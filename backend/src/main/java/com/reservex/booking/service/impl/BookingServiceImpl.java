@@ -18,6 +18,8 @@ import com.reservex.show.entity.Show;
 import com.reservex.show.repository.ShowRepository;
 import com.reservex.notification.service.NotificationService;
 import com.reservex.inventory.service.SeatLockRedisService;
+import com.reservex.kafka.event.BookingCreatedEvent;
+import com.reservex.kafka.producer.BookingEventProducer;
 
 import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
@@ -41,7 +43,7 @@ public class BookingServiceImpl implements BookingService {
     private final SeatLockRepository seatLockRepository;
     private final ShowRepository showRepository;
     private final BookingMapper bookingMapper;
-    private final NotificationService notificationService;
+    private final BookingEventProducer bookingEventProducer;
     private final SeatLockRedisService seatLockRedisService;
 
       /*
@@ -208,57 +210,76 @@ public class BookingServiceImpl implements BookingService {
                 booking.getId(),
                 bookingSeats.size()
         );
-        notificationService.createNotification(
-        userId,
-        "Booking Confirmed",
-        "Your booking has been confirmed."
-);
+
+        BookingCreatedEvent event =
+                BookingCreatedEvent.builder()
+                        .bookingId(
+                                booking.getId().toString()
+                        )
+                        .userId(
+                                userId.toString()
+                        )
+                        .showId(
+                                showId.toString()
+                        )
+                        .bookingStatus(
+                                booking.getBookingStatus().name()
+                        )
+                        .totalAmount(
+                                booking.getTotalAmount().toString()
+                        )
+                        .bookedAt(
+                                booking.getBookedAt().toString()
+                        )
+                        .build();
+
+        bookingEventProducer.publish(event);
 
         return bookingMapper.toResponse(
                 booking,
                 bookingSeats
         );
-        }
+                }
 
-        /*
-        Purpose:
+                /*
+                Purpose:
 
-        Fetch a single booking for the logged-in user.
-        */
-    @Override
-    public BookingResponse getBooking(
-            UUID bookingId,
-            UUID userId
-    ) {
+                Fetch a single booking for the logged-in user.
+                */
+        @Override
+        public BookingResponse getBooking(
+                UUID bookingId,
+                UUID userId
+        ) {
 
-        log.info(
-                "Fetching booking. bookingId={}, userId={}",
-                bookingId,
-                userId
-        );
-
-        Booking booking =
-                bookingRepository.findByIdAndUserId(
+                log.info(
+                        "Fetching booking. bookingId={}, userId={}",
                         bookingId,
                         userId
-                )
-                        .orElseThrow(() ->
-                                new AppException(
-                                        HttpStatus.NOT_FOUND,
-                                        "BOOKING_NOT_FOUND",
-                                        "Booking not found"
-                                )
-                        );
-
-        List<BookingSeat> bookingSeats =
-                bookingSeatRepository.findByBooking(
-                        booking
                 );
 
-        return bookingMapper.toResponse(
-                booking,
-                bookingSeats
-        );
+                Booking booking =
+                        bookingRepository.findByIdAndUserId(
+                                bookingId,
+                                userId
+                        )
+                                .orElseThrow(() ->
+                                        new AppException(
+                                                HttpStatus.NOT_FOUND,
+                                                "BOOKING_NOT_FOUND",
+                                                "Booking not found"
+                                        )
+                                );
+
+                List<BookingSeat> bookingSeats =
+                        bookingSeatRepository.findByBooking(
+                                booking
+                        );
+
+                return bookingMapper.toResponse(
+                        booking,
+                        bookingSeats
+                );
     }
 
        /*
