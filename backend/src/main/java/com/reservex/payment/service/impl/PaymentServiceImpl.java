@@ -15,6 +15,17 @@ import com.reservex.payment.repository.PaymentRepository;
 import com.reservex.payment.repository.PaymentTransactionRepository;
 import com.reservex.payment.service.PaymentService;
 import com.reservex.notification.service.NotificationService;
+import com.reservex.booking.entity.BookingSeat;
+import com.reservex.booking.enums.BookingStatus;
+import com.reservex.booking.repository.BookingSeatRepository;
+import com.reservex.inventory.entity.SeatLock;
+import com.reservex.inventory.entity.ShowSeat;
+import com.reservex.inventory.enums.LockStatus;
+import com.reservex.inventory.enums.SeatStatus;
+import com.reservex.inventory.repository.SeatLockRepository;
+import com.reservex.inventory.repository.ShowSeatRepository;
+import com.reservex.inventory.service.SeatLockRedisService;
+import java.util.List;
 
 import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
@@ -36,6 +47,11 @@ public class PaymentServiceImpl
     private final PaymentTransactionRepository paymentTransactionRepository;
     private final PaymentMapper paymentMapper;
     private final NotificationService notificationService;
+    private final BookingSeatRepository bookingSeatRepository;
+
+    private final SeatLockRepository seatLockRepository;
+    private final ShowSeatRepository showSeatRepository;
+    private final SeatLockRedisService seatLockRedisService;
 
     @Override
     @Transactional
@@ -69,6 +85,13 @@ public class PaymentServiceImpl
             );
         }
 
+        if (booking.getBookingStatus() == BookingStatus.CONFIRMED) {
+            throw new AppException(
+            HttpStatus.BAD_REQUEST,
+            "BOOKING_ALREADY_CONFIRMED",
+            "Booking has already been paid"
+           );
+        }
         paymentRepository
                 .findByBooking_Id(
                         bookingId
@@ -123,6 +146,56 @@ public class PaymentServiceImpl
                         )
                         .build()
         );
+
+        // ------------------------------------------------------------
+        // Payment successful.
+        // Confirm booking and permanently reserve seats.
+        // ------------------------------------------------------------
+
+        // Confirm booking
+        booking.setBookingStatus(
+        BookingStatus.CONFIRMED
+        );
+        bookingRepository.save(booking);   
+
+        // Fetch booking seats
+        List<BookingSeat> bookingSeats =
+                bookingSeatRepository.findByBooking(booking);
+
+        // Mark seats as BOOKED
+        for (BookingSeat bookingSeat : bookingSeats) {
+
+                ShowSeat showSeat = bookingSeat.getShowSeat();
+
+                showSeat.setStatus(
+                SeatStatus.BOOKED
+                );
+
+                showSeatRepository.save(showSeat);
+        }
+
+        // Fetch active locks
+        List<SeatLock> seatLocks =
+                seatLockRepository
+                        .findByUserIdAndShowSeat_Show_IdAndLockStatus(
+                        userId,
+                        booking.getShow().getId(),
+                        LockStatus.ACTIVE
+                );
+
+        // Release DB lock + Redis lock
+        for (SeatLock lock : seatLocks) {
+
+                lock.setLockStatus(
+                LockStatus.RELEASED
+        );
+        seatLockRepository.save(lock);
+
+        seatLockRedisService.unlockSeat(
+                lock.getShowSeat().getShow().getId(),
+                lock.getShowSeat().getSeat().getId()
+                );
+        }
 
         notificationService.createNotification(
         userId,
