@@ -24,6 +24,7 @@ dependencies {
 	implementation 'org.springframework.boot:spring-boot-starter-validation'
 	implementation 'org.springdoc:springdoc-openapi-starter-webmvc-ui:2.8.8'
 	implementation 'org.springframework.boot:spring-boot-starter-data-redis'
+	implementation 'org.springframework.kafka:spring-kafka'
 
 	// JWT
 	implementation 'io.jsonwebtoken:jjwt-api:0.12.6'

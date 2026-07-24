@@ -18,6 +18,8 @@ import com.reservex.show.entity.Show;
 import com.reservex.show.repository.ShowRepository;
 import com.reservex.notification.service.NotificationService;
 import com.reservex.inventory.service.SeatLockRedisService;
+import com.reservex.kafka.event.BookingCreatedEvent;
+import com.reservex.kafka.producer.BookingEventProducer;
 
 import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
@@ -41,7 +43,7 @@ public class BookingServiceImpl implements BookingService {
     private final SeatLockRepository seatLockRepository;
     private final ShowRepository showRepository;
     private final BookingMapper bookingMapper;
-    private final NotificationService notificationService;
+    private final BookingEventProducer bookingEventProducer;
     private final SeatLockRedisService seatLockRedisService;
 
       /*
@@ -61,6 +63,26 @@ public class BookingServiceImpl implements BookingService {
             ↓
     Return booking details
     */
+
+
+    //--------------------below is new one
+    /*
+Purpose:
+
+Convert locked seats into a booking awaiting payment.
+
+ACTIVE LOCKS
+        ↓
+Validate locks
+        ↓
+Create booking (PENDING_PAYMENT)
+        ↓
+Create booking seats
+        ↓
+Publish BookingCreatedEvent
+        ↓
+Payment service completes booking later
+*/
 
         @Override
         @Transactional
@@ -160,7 +182,7 @@ public class BookingServiceImpl implements BookingService {
                                 .userId(userId)
                                 .show(show)
                                 .bookingStatus(
-                                        BookingStatus.CONFIRMED
+                                        BookingStatus.PENDING_PAYMENT   //changed confirmed to pending
                                 )
                                 .totalAmount(totalAmount)
                                 .bookedAt(now)
@@ -172,29 +194,46 @@ public class BookingServiceImpl implements BookingService {
                 booking.getId()
         );
 
+        // for (SeatLock lock : activeLocks) {
+
+        //         ShowSeat showSeat =
+        //                 lock.getShowSeat();
+
+        //         showSeat.setStatus(
+        //                 SeatStatus.BOOKED
+        //         );
+
+        //         lock.setLockStatus(
+        //                 LockStatus.RELEASED
+        //         );
+
+        //         seatLockRedisService.unlockSeat(
+        //                 showSeat.getShow().getId(),
+        //                 showSeat.getSeat().getId()
+        //         );
+
+        //         bookingSeatRepository.save(
+        //                 BookingSeat.builder()
+        //                         .booking(booking)
+        //                         .showSeat(showSeat)
+        //                         .build()
+        //         );
+        // }
+
+        // Booking seats are created immediately.
+//
+// IMPORTANT:
+// Do NOT mark seats as BOOKED yet.
+// Do NOT release seat locks yet.
+// Those actions happen only after payment succeeds.
+
         for (SeatLock lock : activeLocks) {
 
-                ShowSeat showSeat =
-                        lock.getShowSeat();
-
-                showSeat.setStatus(
-                        SeatStatus.BOOKED
-                );
-
-                lock.setLockStatus(
-                        LockStatus.RELEASED
-                );
-
-                seatLockRedisService.unlockSeat(
-                        showSeat.getShow().getId(),
-                        showSeat.getSeat().getId()
-                );
-
-                bookingSeatRepository.save(
-                        BookingSeat.builder()
-                                .booking(booking)
-                                .showSeat(showSeat)
-                                .build()
+        bookingSeatRepository.save(
+            BookingSeat.builder()
+                    .booking(booking)
+                    .showSeat(lock.getShowSeat())
+                    .build()
                 );
         }
 
@@ -203,62 +242,87 @@ public class BookingServiceImpl implements BookingService {
                         booking
                 );
 
+        // log.info(
+        //         "Booking completed successfully. bookingId={}, seatsBooked={}",
+        //         booking.getId(),
+        //         bookingSeats.size()
+        // );
+
         log.info(
-                "Booking completed successfully. bookingId={}, seatsBooked={}",
+                "Booking created in PENDING_PAYMENT state. bookingId={}, seatCount={}",
                 booking.getId(),
                 bookingSeats.size()
         );
-        notificationService.createNotification(
-        userId,
-        "Booking Confirmed",
-        "Your booking has been confirmed."
-);
+
+        BookingCreatedEvent event =
+                BookingCreatedEvent.builder()
+                        .bookingId(
+                                booking.getId().toString()
+                        )
+                        .userId(
+                                userId.toString()
+                        )
+                        .showId(
+                                showId.toString()
+                        )
+                        .bookingStatus(
+                                booking.getBookingStatus().name()
+                        )
+                        .totalAmount(
+                                booking.getTotalAmount().toString()
+                        )
+                        .bookedAt(
+                                booking.getBookedAt().toString()
+                        )
+                        .build();
+
+        bookingEventProducer.publish(event);
 
         return bookingMapper.toResponse(
                 booking,
                 bookingSeats
         );
-        }
+                }
 
-        /*
-        Purpose:
+                /*
+                Purpose:
 
-        Fetch a single booking for the logged-in user.
-        */
-    @Override
-    public BookingResponse getBooking(
-            UUID bookingId,
-            UUID userId
-    ) {
+                Fetch a single booking for the logged-in user.
+                */
+        @Override
+        public BookingResponse getBooking(
+                UUID bookingId,
+                UUID userId
+        ) {
 
-        log.info(
-                "Fetching booking. bookingId={}, userId={}",
-                bookingId,
-                userId
-        );
-
-        Booking booking =
-                bookingRepository.findByIdAndUserId(
+                log.info(
+                        "Fetching booking. bookingId={}, userId={}",
                         bookingId,
                         userId
-                )
-                        .orElseThrow(() ->
-                                new AppException(
-                                        HttpStatus.NOT_FOUND,
-                                        "BOOKING_NOT_FOUND",
-                                        "Booking not found"
-                                )
-                        );
-
-        List<BookingSeat> bookingSeats =
-                bookingSeatRepository.findByBooking(
-                        booking
                 );
 
-        return bookingMapper.toResponse(
-                booking,
-                bookingSeats
-        );
+                Booking booking =
+                        bookingRepository.findByIdAndUserId(
+                                bookingId,
+                                userId
+                        )
+                                .orElseThrow(() ->
+                                        new AppException(
+                                                HttpStatus.NOT_FOUND,
+                                                "BOOKING_NOT_FOUND",
+                                                "Booking not found"
+                                        )
+                                );
+
+                List<BookingSeat> bookingSeats =
+                        bookingSeatRepository.findByBooking(
+                                booking
+                        );
+
+                return bookingMapper.toResponse(
+                        booking,
+                        bookingSeats
+                );
     }
 
        /*
